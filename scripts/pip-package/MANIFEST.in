@@ -1,0 +1,2 @@
+include monad/*.so
+include monad/*.pyd

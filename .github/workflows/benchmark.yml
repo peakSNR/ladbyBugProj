@@ -1,0 +1,97 @@
+name: Benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      nodes:
+        description: "Number of nodes for neighbor sampler bench"
+        default: "20000"
+      degree:
+        description: "Out-degree per node"
+        default: "5"
+      fanout:
+        description: "Fanout list (space separated)"
+        default: "10"
+      iters:
+        description: "Iterations"
+        default: "20"
+  schedule:
+    - cron: "0 6 * * 1" # Mondays at 06:00 UTC
+
+env:
+  GEN: Ninja
+  EXTRA_CMAKE_FLAGS: -DBUILD_EXTENSIONS=FALSE
+  CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
+  CCACHE_BASEDIR: ${{ github.workspace }}
+  CCACHE_MAXSIZE: 10G
+  WERROR: 1
+
+jobs:
+  neighbor-sampler:
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set parallelism
+        run: |
+          echo "NUM_THREADS=$(nproc)" >> $GITHUB_ENV
+          echo "TEST_JOBS=$(nproc)" >> $GITHUB_ENV
+          echo "CMAKE_BUILD_PARALLEL_LEVEL=$(nproc)" >> $GITHUB_ENV
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: .cache/ccache
+          key: bench-ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.ref }}
+          restore-keys: |
+            bench-ccache-${{ runner.os }}-${{ runner.arch }}-refs/heads/main
+            bench-ccache-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Ensure build toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build build-essential cmake ccache
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Build Python target (no extensions)
+        run: make GEN=${GEN} python
+
+      - name: Neighbor sampler benchmark
+        env:
+          NODES: ${{ github.event.inputs.nodes || '20000' }}
+          DEGREE: ${{ github.event.inputs.degree || '5' }}
+          FANOUT: ${{ github.event.inputs.fanout || '10' }}
+          ITERS: ${{ github.event.inputs.iters || '20' }}
+        run: |
+          export PYTHONPATH=tools/python_api/build
+          echo "Running neighbor bench: nodes=$NODES degree=$DEGREE fanout=$FANOUT iters=$ITERS" | tee bench.log
+          uv run python tools/python_api/bench/neighbor_sampling_bench.py \
+            --nodes $NODES \
+            --degree $DEGREE \
+            --fanout $FANOUT \
+            --iters $ITERS | tee -a bench.log
+
+      - name: Build benchmark binary (sanity)
+        run: |
+          cmake -S . -B build/relwithdebinfo \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -GNinja \
+            -DBUILD_BENCHMARK=TRUE \
+            -DBUILD_EXTENSIONS=FALSE \
+            ${EXTRA_CMAKE_FLAGS}
+          cmake --build build/relwithdebinfo --target benchmark --parallel ${NUM_THREADS}
+          ./build/relwithdebinfo/tools/benchmark/benchmark --help | head -n 20 | tee -a bench.log
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: bench.log

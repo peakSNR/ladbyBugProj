@@ -1,0 +1,58 @@
+-DATASET CSV empty
+-SKIP
+
+--
+
+
+# Using DATA B from neo4j.cypher
+
+-CASE MigrateFromNeo4jDocSample
+-STATEMENT load extension "${MONAD_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.monad_extension"
+---- ok
+-STATEMENT CALL NEO4J_MIGRATE("localhost", "neo4j", "czy990424", ["User", "City"], ["Follows", "LivesIn"]);
+---- 5
+City|name|STRING|["String"]
+City|population|INT64|["Long"]
+User|name|STRING|["String"]
+User|age|INT64|["Long"]
+Follows_User_User|since|INT64|["Long"]
+
+-STATEMENT CALL SHOW_TABLES() RETURN *;
+---- 4
+0|User|NODE|local(monad)|
+1|City|NODE|local(monad)|
+2|Follows|REL|local(monad)|
+3|LivesIn|REL|local(monad)|
+-STATEMENT match (u:User)-[f:Follows]->(u1:User) return max(f.since);
+---- 1
+2022
+
+-CASE MigrateFromNeo4jDocSampleUsingKleeneStar
+-STATEMENT load extension "${MONAD_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.monad_extension"
+---- ok
+-STATEMENT CALL NEO4J_MIGRATE("localhost", "neo4j", "czy990424", ["*"], ["*"]);
+---- 5
+City|name|STRING|["String"]
+City|population|INT64|["Long"]
+User|name|STRING|["String"]
+User|age|INT64|["Long"]
+Follows_User_User|since|INT64|["Long"]
+
+-STATEMENT CALL SHOW_TABLES() RETURN *;
+---- 8
+0|okLabel|NODE|local(monad)|
+3|badLabel|NODE|local(monad)|
+1|greatLabel|NODE|local(monad)|
+6|Follows|REL|local(monad)|
+4|User|NODE|local(monad)|
+2|City|NODE|local(monad)|
+5|LivesIn|REL|local(monad)|
+7|RANDOMREl|REL|local(monad)|
+
+-STATEMENT match (u:User)-[f:Follows]->(u1:User) return max(f.since);
+---- 1
+2022
+
+-STATEMENT match (a)-[:RANDOMREL]->(b) return a._id_;
+---- 1
+13

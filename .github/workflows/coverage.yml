@@ -1,0 +1,70 @@
+name: Coverage
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * 1" # Mondays 07:00 UTC
+
+concurrency:
+  group: coverage-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    env:
+      GEN: Ninja
+      EXTRA_CMAKE_FLAGS: -DBUILD_EXTENSIONS=FALSE
+      CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_MAXSIZE: 10G
+      WERROR: 1
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set parallelism
+        run: |
+          echo "NUM_THREADS=$(nproc)" >> $GITHUB_ENV
+          echo "TEST_JOBS=$(nproc)" >> $GITHUB_ENV
+          echo "CMAKE_BUILD_PARALLEL_LEVEL=$(nproc)" >> $GITHUB_ENV
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: .cache/ccache
+          key: cov-ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.ref }}
+          restore-keys: |
+            cov-ccache-${{ runner.os }}-${{ runner.arch }}-refs/heads/main
+            cov-ccache-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Ensure build toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build build-essential cmake ccache lcov
+
+      - name: Build and test with coverage (Release)
+        run: make GEN=${GEN} lcov
+
+      - name: Collect lcov report
+        run: |
+          lcov --config-file .lcovrc -c -d ./ --no-external -o cover.info
+          lcov --remove cover.info $(< .github/workflows_deprecated/lcov_exclude) -o cover.info
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: cover.info
+
+      - name: Upload to Codecov
+        if: env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: cover.info

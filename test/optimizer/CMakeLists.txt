@@ -1,0 +1,1 @@
+add_monad_test(optimizer_test optimizer_test.cpp)

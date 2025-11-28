@@ -1,0 +1,11 @@
+add_subdirectory(catalog_entry)
+
+add_library(monad_catalog
+        OBJECT
+        catalog.cpp
+        catalog_set.cpp
+        property_definition_collection.cpp)
+
+set(ALL_OBJECT_FILES
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:monad_catalog>
+        PARENT_SCOPE)

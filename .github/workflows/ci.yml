@@ -1,0 +1,88 @@
+name: CI (fast)
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  # Share group across workflows on the same ref so a new run (incl. release)
+  # cancels any in-progress CI for that ref (saves minutes on main).
+  group: shared-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux-tests:
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    env:
+      GEN: Ninja
+      EXTRA_CMAKE_FLAGS: -DBUILD_EXTENSIONS=FALSE
+      CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_MAXSIZE: 10G
+      WERROR: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set parallelism
+        run: |
+          echo "NUM_THREADS=$(nproc)" >> $GITHUB_ENV
+          echo "TEST_JOBS=$(nproc)" >> $GITHUB_ENV
+          echo "CMAKE_BUILD_PARALLEL_LEVEL=$(nproc)" >> $GITHUB_ENV
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: .cache/ccache
+          key: tests-ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.ref }}
+          restore-keys: |
+            tests-ccache-${{ runner.os }}-${{ runner.arch }}-refs/heads/main
+            tests-ccache-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Ensure build toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build build-essential cmake ccache
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Configure (RelWithDebInfo, Python + Tests)
+        run: |
+          cmake -S . -B build/relwithdebinfo \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -GNinja \
+            -DBUILD_PYTHON=TRUE \
+            -DBUILD_SHELL=FALSE \
+            -DBUILD_TESTS=TRUE \
+            -DENABLE_BACKTRACES=TRUE \
+            -DBUILD_EXTENSIONS=FALSE \
+            ${EXTRA_CMAKE_FLAGS}
+
+      - name: Build
+        run: cmake --build build/relwithdebinfo --parallel ${NUM_THREADS}
+
+      - name: Run C++/e2e tests
+        run: ctest --test-dir build/relwithdebinfo/test --output-on-failure -j ${TEST_JOBS}
+
+      - name: Python tests (uv + built artifacts)
+        run: |
+          make -C tools/python_api .venv
+          make -C tools/python_api requirements
+          PYTHONPATH=tools/python_api/build tools/python_api/.venv/bin/python -m pytest -vv tools/python_api/test
+
+      - name: Show ccache stats
+        if: always()
+        run: ccache --show-stats || true

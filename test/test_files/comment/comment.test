@@ -1,0 +1,54 @@
+-DATASET CSV tinysnb
+
+--
+
+-CASE CommentOnTable
+-STATEMENT COMMENT ON TABLE person IS 'A test comment'
+---- 1
+Comment added to table person.
+-STATEMENT COMMENT ON TABLE knows IS 'Another test comment'
+---- 1
+Comment added to table knows.
+-STATEMENT CALL show_tables() RETURN *
+---- 8
+0|person|NODE|local(monad)|A test comment
+1|organisation|NODE|local(monad)|
+2|movies|NODE|local(monad)|
+4|knows|REL|local(monad)|Another test comment
+6|studyAt|REL|local(monad)|
+8|workAt|REL|local(monad)|
+10|meets|REL|local(monad)|
+12|marries|REL|local(monad)|
+-STATEMENT CALL show_tables() RETURN *
+---- 8
+0|person|NODE|local(monad)|A test comment
+1|organisation|NODE|local(monad)|
+2|movies|NODE|local(monad)|
+4|knows|REL|local(monad)|Another test comment
+6|studyAt|REL|local(monad)|
+8|workAt|REL|local(monad)|
+10|meets|REL|local(monad)|
+12|marries|REL|local(monad)|
+
+-CASE CommentOnRelGroup
+-STATEMENT CREATE NODE TABLE PersonA (id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE PersonB (id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE REL TABLE Rel (FROM PersonA TO PersonB, FROM PersonB TO PersonA);
+---- ok
+-STATEMENT COMMENT ON TABLE Rel IS 'This should appear';
+---- ok
+-STATEMENT CALL SHOW_TABLES() RETURN *;
+---- 11
+0|person|NODE|local(monad)|
+1|organisation|NODE|local(monad)|
+2|movies|NODE|local(monad)|
+4|knows|REL|local(monad)|
+6|studyAt|REL|local(monad)|
+8|workAt|REL|local(monad)|
+10|meets|REL|local(monad)|
+12|marries|REL|local(monad)|
+13|PersonA|NODE|local(monad)|
+14|PersonB|NODE|local(monad)|
+17|Rel|REL|local(monad)|This should appear

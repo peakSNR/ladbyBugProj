@@ -1,0 +1,1 @@
+add_monad_test(planner_tests cardinality_test.cpp)
