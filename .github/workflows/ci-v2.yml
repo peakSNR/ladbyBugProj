@@ -1,0 +1,125 @@
+name: CI (fast)
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: shared-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux-tests:
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    env:
+      GEN: Ninja
+      EXTRA_CMAKE_FLAGS: -DBUILD_EXTENSIONS=FALSE
+      CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_MAXSIZE: 10G
+      WERROR: 1
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      ############################################################
+      # 1. Download the latest prebuilt core SDK (FAST CI mode)
+      ############################################################
+      - name: Download latest core SDK (linux-x86_64)
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: build-release-v2.yml
+          name: monad-core-sdk-linux-x86_64
+          run_id: latest
+        continue-on-error: true
+
+      ############################################################
+      # 2. Setup environment and ccache
+      ############################################################
+      - name: Set parallelism
+        run: |
+          echo "NUM_THREADS=$(nproc)" >> $GITHUB_ENV
+          echo "TEST_JOBS=$(nproc)" >> $GITHUB_ENV
+          echo "CMAKE_BUILD_PARALLEL_LEVEL=$(nproc)" >> $GITHUB_ENV
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: .cache/ccache
+          key: tests-ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.ref }}
+          restore-keys: |
+            tests-ccache-${{ runner.os }}-${{ runner.arch }}-refs/heads/main
+            tests-ccache-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install build toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build build-essential cmake ccache
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      ############################################################
+      # 3. Configure using PREBUILT SDK (NO full rebuild)
+      ############################################################
+      - name: Configure (FAST mode using core SDK)
+        run: |
+          cmake -S . -B build/relwithdebinfo \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -GNinja \
+            -DBUILD_PYTHON=FALSE \
+            -DBUILD_TESTS=FALSE \
+            -DBUILD_SHELL=FALSE \
+            -DBUILD_EXTENSIONS=FALSE \
+            -DCMAKE_PREFIX_PATH="${{ github.workspace }}/core-sdk/linux-x86_64" \
+            -DCMAKE_LIBRARY_PATH="${{ github.workspace }}/core-sdk/linux-x86_64/lib" \
+            -DCMAKE_INCLUDE_PATH="${{ github.workspace }}/core-sdk/linux-x86_64/include" \
+            ${EXTRA_CMAKE_FLAGS}
+
+      ############################################################
+      # 4. Build small targets (NO full compile)
+      ############################################################
+      - name: Build minimal artifacts
+        run: |
+          cmake --build build/relwithdebinfo --parallel ${NUM_THREADS}
+
+      ############################################################
+      # 5. Run TEST BINARIES directly from SDK
+      ############################################################
+      - name: Run C++ tests from core SDK
+        run: |
+          chmod +x core-sdk/linux-x86_64/tests/*
+          for t in core-sdk/linux-x86_64/tests/*; do
+            echo "Running $t"
+            $t || exit 1
+          done
+
+      ############################################################
+      # 6. Run Python tests using PREBUILT _monad.so
+      ############################################################
+      - name: Python tests (using prebuilt binding)
+        run: |
+          make -C tools/python_api .venv
+          make -C tools/python_api requirements
+          export PYTHONPATH="${{ github.workspace }}/core-sdk/linux-x86_64/python"
+          tools/python_api/.venv/bin/python -m pytest -vv tools/python_api/test
+
+      ############################################################
+      # 7. Show ccache stats
+      ############################################################
+      - name: Show ccache stats
+        if: always()
+        run: ccache --show-stats || true
