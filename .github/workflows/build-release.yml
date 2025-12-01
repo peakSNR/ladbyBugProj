@@ -29,7 +29,7 @@ env:
 jobs:
   sdist:
     # Version check temporarily disabled
-    runs-on: self-hosted  #blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404  #blacksmith-8vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
         with:
