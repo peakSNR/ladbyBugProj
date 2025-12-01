@@ -2,8 +2,8 @@ name: CI (fast)
 
 on:
   pull_request:
-  push:
-    branches:
+  #push:
+    #branches:
       #- main
   workflow_dispatch:
 
