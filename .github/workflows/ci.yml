@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   linux-tests:
-    runs-on: self-hosted  #blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     env:
       GEN: Ninja
       EXTRA_CMAKE_FLAGS: -DBUILD_EXTENSIONS=FALSE

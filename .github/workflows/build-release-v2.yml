@@ -133,7 +133,7 @@ jobs:
             cp -a install/include/. core-sdk/linux-${{ matrix.arch }}/include/
           fi
 
-      - name: Optional: collect Python bindings into core SDK (if present)
+      - name: Optional - collect Python bindings into core SDK (if present)
         run: |
           mkdir -p core-sdk/linux-${{ matrix.arch }}/python
           if [ -d "tools/python_api/build/monad" ]; then
