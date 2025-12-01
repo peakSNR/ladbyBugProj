@@ -225,7 +225,7 @@ jobs:
             cp -a install/include/. core-sdk/macos-universal/include/
           fi
 
-      - name: Optional: collect Python bindings into SDK (if present)
+      - name: Optional - collect Python bindings into SDK (if present)
         run: |
           mkdir -p core-sdk/macos-universal/python
           if [ -d "tools/python_api/build/monad" ]; then
