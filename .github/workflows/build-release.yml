@@ -322,7 +322,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: core-sdk-linux-${{ matrix.arch }}
+          name: monad-core-sdk-linux-${{ matrix.arch }}
           path: core-sdk/
 
       - name: Verify CLI works
@@ -367,7 +367,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: core-sdk-macos-universal
+          name: monad-core-sdk-macos-universal
           path: core-sdk/
 
       - name: Verify CLI works
@@ -462,6 +462,7 @@ jobs:
         with:
           name: wheels-linux-v2-${{ matrix.arch }}
           path: wheelhouse/*.whl
+
   macos-wheels-v2:
     needs:
       - sdist-v2
