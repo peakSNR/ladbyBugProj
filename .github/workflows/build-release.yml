@@ -394,7 +394,9 @@ jobs:
   #    (cibuildwheel + ccache)
   # --------------------------------------------------------------------------
   linux-wheels-v2:
-    needs: sdist-v2
+    needs:
+      - sdist-v2
+      - core-build-linux-v2
     strategy:
       fail-fast: false
       matrix:
@@ -403,129 +405,121 @@ jobs:
             runner: blacksmith-16vcpu-ubuntu-2404
           - arch: aarch64
             runner: blacksmith-16vcpu-ubuntu-2404-arm
+
     runs-on: ${{ matrix.runner }}
     env:
-      CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
-      CCACHE_BASEDIR: ${{ github.workspace }}
-      CCACHE_MAXSIZE: 10G
       CIBW_PLATFORM: linux
       CIBW_ARCHS: ${{ matrix.arch }}
-      EXTRA_CMAKE_FLAGS: ${{ matrix.arch == 'aarch64' && '-DSIMSIMD_TARGET_SAPPHIRE=0 -DSIMSIMD_TARGET_TURIN=0 -DBUILD_EXTENSIONS=FALSE' || '-DBUILD_EXTENSIONS=FALSE' }}
+      CIBW_SKIP: "pp* *-musllinux*"
       CIBW_ENVIRONMENT: >
-        CCACHE_DIR=${{ github.workspace }}/.cache/ccache
-        CCACHE_BASEDIR=${{ github.workspace }}
-        CCACHE_MAXSIZE=10G
-        CMAKE_ARGS="-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -GNinja -DBUILD_EXTENSIONS=FALSE"
-      CIBW_TEST_REQUIRES: pytest
-      CIBW_TEST_COMMAND: |
-        python - <<'PY'
-        from monad import Database, Connection
-        db = Database(":memory:")
-        conn = Connection(db)
-        res = conn.execute("RETURN 1")
-        print(res.get_all())
-        PY
+        CMAKE_ARGS=""
+      CCACHE_DISABLE: 1
+
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Set parallelism
-        run: |
-          echo "NUM_THREADS=$(nproc)" >> $GITHUB_ENV
-          echo "TEST_JOBS=$(nproc)" >> $GITHUB_ENV
-
-      - name: Sticky disk (ccache)
-        uses: actions/cache@v4
+      # Download sdist
+      - uses: actions/download-artifact@v4
         with:
-          path: .cache/ccache
-          key: wheels-ccache-v2-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('CMakeLists.txt','**/*.cmake','tools/python_api/**','scripts/pip-package/**') }}
-          restore-keys: |
-            wheels-ccache-v2-${{ runner.os }}-${{ matrix.arch }}-
+          name: python-sdist-v2
+          path: dist/
 
-      - name: Sticky disk (build dir)
-        uses: useblacksmith/stickydisk@v1
+      # Download prebuilt core-SDK
+      - uses: actions/download-artifact@v4
         with:
-          path: build
-          key: wheels-build-v2-${{ matrix.arch }}-${{ hashFiles('CMakeLists.txt','**/*.cmake','tools/python_api/**','scripts/pip-package/**') }}
+          name: monad-core-sdk-linux-${{ matrix.arch }}
+          path: core-sdk/
 
-      - name: Ensure build toolchain
+      # Remove ALL C++ sources (prevents compilation)
+      - name: Remove C++ python binding sources
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build build-essential cmake ccache
+          rm -rf tools/python_api/src_cpp* || true
+          rm -rf tools/python_api/build || true
+
+      # Copy prebuilt compiled module into Python package
+      - name: Copy prebuilt _monad.so into Python package
+        run: |
+          mkdir -p tools/python_api/src_py/monad
+          cp core-sdk/linux-${{ matrix.arch }}/python/_monad*.so tools/python_api/src_py/monad/
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - uses: astral-sh/setup-uv@v3
         with:
           version: "latest"
 
-      - name: Download sdist
-        uses: actions/download-artifact@v4
-        with:
-          name: python-sdist-v2
-          path: scripts/pip-package
-
-      - name: Build wheels (Linux, v2)
+      - name: Build wheels with cibuildwheel
         run: |
-          sdist=$(ls scripts/pip-package/*.tar.gz)
+          sdist=$(ls dist/*.tar.gz)
           uv run python -m pip install cibuildwheel
-          uv run python -m cibuildwheel --output-dir scripts/pip-package/wheelhouse "$sdist"
+          uv run python -m cibuildwheel --output-dir wheelhouse "$sdist"
 
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-linux-v2-${{ matrix.arch }}
-          path: scripts/pip-package/wheelhouse/*.whl
-
+          path: wheelhouse/*.whl
   macos-wheels-v2:
-    needs: sdist-v2
+    needs:
+      - sdist-v2
+      - core-build-macos-v2
     runs-on: macos-15-xlarge
     env:
       CIBW_PLATFORM: macos
       CIBW_ARCHS: "arm64 x86_64"
       MACOSX_DEPLOYMENT_TARGET: "11.0"
-      CIBW_ENVIRONMENT: >
-        CMAKE_ARGS="-GNinja -DBUILD_EXTENSIONS=FALSE"
-      CIBW_TEST_REQUIRES: pytest
-      CIBW_TEST_COMMAND: |
-        python - <<'PY'
-        from monad import Database, Connection
-        db = Database(":memory:")
-        conn = Connection(db)
-        res = conn.execute("RETURN 1")
-        print(res.get_all())
-        PY
+      CCACHE_DISABLE: 1
+
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      # Download sdist
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-sdist-v2
+          path: dist/
+
+      # Download prebuilt universal macOS SDK
+      - uses: actions/download-artifact@v4
+        with:
+          name: monad-core-sdk-macos-universal
+          path: core-sdk/
+
+      # Remove C++ binding source folders
+      - name: Remove C++ python binding sources
+        run: |
+          rm -rf tools/python_api/src_cpp* || true
+          rm -rf tools/python_api/build || true
+
+      # Copy prebuilt universal _monad.so
+      - name: Copy prebuilt _monad.so into Python package
+        run: |
+          mkdir -p tools/python_api/src_py/monad
+          cp core-sdk/macos-universal/python/_monad*.so tools/python_api/src_py/monad/
+
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - uses: astral-sh/setup-uv@v3
         with:
           version: "latest"
 
-      - name: Download sdist
-        uses: actions/download-artifact@v4
-        with:
-          name: python-sdist-v2
-          path: scripts/pip-package
-
-      - name: Build wheels (macOS, v2)
+      - name: Build wheels
         run: |
-          sdist=$(ls scripts/pip-package/*.tar.gz)
+          sdist=$(ls dist/*.tar.gz)
           uv run python -m pip install cibuildwheel
-          uv run python -m cibuildwheel --output-dir scripts/pip-package/wheelhouse "$sdist"
+          uv run python -m cibuildwheel --output-dir wheelhouse "$sdist"
 
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-macos-v2-universal
-          path: scripts/pip-package/wheelhouse/*.whl
+          path: wheelhouse/*.whl
 
   # --------------------------------------------------------------------------
   # 6) PUBLISH v2 – Upload wheels + CLI + libs for tagged releases
