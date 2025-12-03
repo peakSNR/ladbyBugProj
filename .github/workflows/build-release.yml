@@ -353,8 +353,8 @@ jobs:
         run: |
           arch="${{ matrix.arch }}"
           tar -czvf libmonad-linux-${arch}.tar.gz \
-            -C core-sdk/include . \
-            -C core-sdk/lib . \
+            -C $GITHUB_WORKSPACE/core-sdk/include . \
+            -C $GITHUB_WORKSPACE/core-sdk/lib . \
             -C $GITHUB_WORKSPACE LICENSE
 
       - uses: actions/upload-artifact@v4
