@@ -444,7 +444,7 @@ jobs:
       - name: Copy prebuilt _monad.so into Python package
         run: |
           mkdir -p tools/python_api/src_py/monad
-          cp core-sdk/linux-${{ matrix.arch }}/python/_monad*.so tools/python_api/src_py/monad/
+          cp core-sdk/python/_monad*.so tools/python_api/src_py/monad/
 
       - uses: actions/setup-python@v5
         with:
