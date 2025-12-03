@@ -73,7 +73,10 @@ jobs:
       CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_MAXSIZE: 10G
-      EXTRA_CMAKE_FLAGS: ${{ matrix.arch == 'aarch64' && '-DSIMSIMD_TARGET_SAPPHIRE=0 -DSIMSIMD_TARGET_TURIN=0 -DBUILD_EXTENSIONS=FALSE' || '-DBUILD_EXTENSIONS=FALSE' }}
+      EXTRA_CMAKE_FLAGS: ${{ matrix.arch == 'aarch64'
+        && '-DSIMSIMD_TARGET_SAPPHIRE=0 -DSIMSIMD_TARGET_TURIN=0 -DBUILD_EXTENSIONS=FALSE -DBUILD_PYTHON=ON'
+        || '-DBUILD_EXTENSIONS=FALSE -DBUILD_PYTHON=ON' }}
+
     steps:
       - uses: actions/checkout@v4
         with:
