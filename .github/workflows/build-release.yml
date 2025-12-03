@@ -328,20 +328,18 @@ jobs:
           name: monad-core-sdk-linux-${{ matrix.arch }}
           path: core-sdk/
 
-      # Debug: show real artifact structure
       - name: Debug artifact
         run: ls -R core-sdk
 
-      # Corrected CLI path
       - name: Verify CLI works
         run: |
-          chmod +x core-sdk/monad-core-sdk-linux-${{ matrix.arch }}/cli/monad
-          core-sdk/monad-core-sdk-linux-${{ matrix.arch }}/cli/monad --help
+          chmod +x core-sdk/cli/monad
+          core-sdk/cli/monad --help
 
       - name: Package CLI
         run: |
           mkdir pkg
-          cp core-sdk/monad-core-sdk-linux-${{ matrix.arch }}/cli/monad pkg/
+          cp core-sdk/cli/monad pkg/
           cp LICENSE pkg/
           tar -czvf monad_cli-linux-${{ matrix.arch }}.tar.gz -C pkg .
 
@@ -350,22 +348,13 @@ jobs:
           name: monad_cli-linux-${{ matrix.arch }}
           path: monad_cli-linux-${{ matrix.arch }}.tar.gz
 
-      # Corrected lib/include packaging
       - name: Package lib (Linux)
         run: |
           arch="${{ matrix.arch }}"
-          base="core-sdk/monad-core-sdk-linux-${arch}"
-
-          echo "Checking $base/lib and $base/include"
-          if [ -d "$base/lib" ] && [ -d "$base/include" ]; then
-            tar -czvf libmonad-linux-${arch}.tar.gz \
-              -C $base/include . \
-              -C $base/lib . \
-              -C $GITHUB_WORKSPACE LICENSE
-          else
-            echo "Missing lib/include folders inside: $base"
-            exit 1
-          fi
+          tar -czvf libmonad-linux-${arch}.tar.gz \
+            -C core-sdk/include . \
+            -C core-sdk/lib . \
+            -C $GITHUB_WORKSPACE LICENSE
 
       - uses: actions/upload-artifact@v4
         with:
