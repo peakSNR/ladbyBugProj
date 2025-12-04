@@ -409,10 +409,14 @@ jobs:
             runner: blacksmith-16vcpu-ubuntu-2404-arm
 
     runs-on: ${{ matrix.runner }}
+
     env:
       CIBW_PLATFORM: linux
       CIBW_ARCHS: ${{ matrix.arch }}
       CIBW_SKIP: "pp* *-musllinux*"
+      CIBW_BUILD: "cp312-* cp313-* cp314-*"
+      CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_35
+      CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_35
       CIBW_ENVIRONMENT: >
         CMAKE_ARGS=""
       CCACHE_DISABLE: 1
@@ -422,33 +426,25 @@ jobs:
         with:
           submodules: recursive
 
-      # Download sdist
       - uses: actions/download-artifact@v4
         with:
           name: python-sdist-v2
           path: dist/
 
-      # Download prebuilt core-SDK
       - uses: actions/download-artifact@v4
         with:
           name: monad-core-sdk-linux-${{ matrix.arch }}
           path: core-sdk/
 
-      # Remove ALL C++ sources (prevents compilation)
       - name: Remove C++ python binding sources
         run: |
           rm -rf tools/python_api/src_cpp* || true
           rm -rf tools/python_api/build || true
 
-      # Copy prebuilt compiled module into Python package
       - name: Copy prebuilt _monad.so into Python package
         run: |
           mkdir -p tools/python_api/src_py/monad
           cp core-sdk/python/_monad*.so tools/python_api/src_py/monad/
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
 
       - uses: astral-sh/setup-uv@v3
         with:
